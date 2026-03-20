@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profi Bolus-Rechner</title>
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; background: #121212; color: white; padding: 15px; }
+        .calc-container { max-width: 500px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 15px; border: 1px solid #333; }
+        h2 { color: #5dade2; text-align: center; margin-top: 0; }
+        .section-title { font-size: 14px; color: #5dade2; margin: 20px 0 10px 0; border-bottom: 1px solid #333; padding-bottom: 5px; text-transform: uppercase; font-weight: bold; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; font-size: 13px; margin-bottom: 5px; color: #aaa; }
+        input, select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #2c2c2c; color: white; box-sizing: border-box; font-size: 16px; }
+        .flex-row { display: flex; gap: 10px; }
+        .flex-row div { flex: 1; }
+        .result-box { margin-top: 20px; padding: 20px; background: #3498db22; border-radius: 10px; border: 1px solid #3498db; text-align: center; display: none; }
+        .ins-value { font-size: 32px; font-weight: bold; color: #5dade2; }
+        .disclaimer { font-size: 11px; color: #888; margin-top: 20px; text-align: center; line-height: 1.4; border: 1px dashed #444; padding: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="calc-container">
+    <h2>💉 Bolus-Rechner</h2>
+
+    <div class="input-group">
+        <label>Blutzucker-Einheit:</label>
+        <select id="unit" onchange="updateLabels()">
+            <option value="mgdl">mg/dl</option>
+            <option value="mmol">mmol/l</option>
+        </select>
+    </div>
+
+    <div class="section-title">Korrektur</div>
+    <div class="flex-row">
+        <div class="input-group">
+            <label id="lbl-akt">Aktueller BZ:</label>
+            <input type="number" id="currentBZ" step="0.1" placeholder="z.B. 180" oninput="calculateBolus()">
+        </div>
+        <div class="input-group">
+            <label id="lbl-ziel">Zielwert:</label>
+            <input type="number" id="targetBZ" step="0.1" placeholder="z.B. 100" oninput="calculateBolus()">
+        </div>
+    </div>
+    <div class="input-group">
+        <label>Korrektur-Faktor (ISF): 1 IE senkt BZ um...</label>
+        <input type="number" id="isf" step="0.1" placeholder="z.B. 40" oninput="calculateBolus()">
+    </div>
+
+    <div class="section-title">Mahlzeit</div>
+    <div class="input-group">
+        <label>Berechnungs-Modus:</label>
+        <select id="calcMode" onchange="updateLabels()">
+            <option value="ke">KE (10g KH)</option>
+            <option value="be">BE (12g KH)</option>
+            <option value="gramm">Gramm Kohlenhydrate (g KH)</option>
+        </select>
+    </div>
+    <div class="flex-row">
+        <div class="input-group">
+            <label id="lbl-menge">Menge:</label>
+            <input type="number" id="khAmount" step="0.1" placeholder="z.B. 4" oninput="calculateBolus()">
+        </div>
+        <div class="input-group">
+            <label id="lbl-faktor">Faktor / Verhältnis:</label>
+            <input type="number" id="khFactor" step="0.1" placeholder="z.B. 1.5" oninput="calculateBolus()">
+        </div>
+    </div>
+
+    <div id="result-area" class="result-box">
+        <div style="font-size: 14px; margin-bottom: 5px;">Empfohlener Bolus:</div>
+        <span id="bolus-total" class="ins-value">0.00</span> <span style="font-size: 20px; color:#5dade2;">IE</span>
+        <div id="breakdown" style="font-size: 12px; color: #aaa; margin-top: 10px;"></div>
+    </div>
+
+    <div class="disclaimer">
+        <strong>⚠️ Wichtig:</strong> Dieser Rechner berücksichtigt kein aktives Insulin (IOB). Berechnete Werte sind nur Vorschläge. Besprich deine Faktoren mit deinem Diabetesteam und entscheide eigenverantwortlich.
+    </div>
+</div>
+
+<script>
+function updateLabels() {
+    const unit = document.getElementById('unit').value;
+    const mode = document.getElementById('calcMode').value;
+    
+    // BZ Labels
+    document.getElementById('lbl-akt').innerText = `Aktueller BZ (${unit}):`;
+    document.getElementById('lbl-ziel').innerText = `Zielwert (${unit}):`;
+    
+    // KH Labels
+    const factorLabel = document.getElementById('lbl-faktor');
+    const quantityLabel = document.getElementById('lbl-menge');
+    
+    if(mode === "ke") {
+        quantityLabel.innerText = "Menge (KE):";
+        factorLabel.innerText = "Faktor (IE pro KE):";
+    } else if(mode === "be") {
+        quantityLabel.innerText = "Menge (BE):";
+        factorLabel.innerText = "Faktor (IE pro BE):";
+    } else {
+        quantityLabel.innerText = "Menge (Gramm KH):";
+        factorLabel.innerText = "Verhältnis (1 IE für X g KH):";
+    }
+    calculateBolus();
+}
+
+function calculateBolus() {
+    const current = parseFloat(document.getElementById('currentBZ').value) || 0;
+    const target = parseFloat(document.getElementById('targetBZ').value) || 0;
+    const isf = parseFloat(document.getElementById('isf').value) || 0;
+    const mode = document.getElementById('calcMode').value;
+    const khAmount = parseFloat(document.getElementById('khAmount').value) || 0;
+    const khFactor = parseFloat(document.getElementById('khFactor').value) || 0;
+    
+    let correctionInsulin = 0;
+    if (current > target && isf > 0) {
+        correctionInsulin = (current - target) / isf;
+    }
+    
+    let foodInsulin = 0;
+    if (khAmount > 0 && khFactor > 0) {
+        if (mode === "gramm") {
+            // Für g KH: Menge / Verhältnis (z.B. 60g / 10 = 6 IE)
+            foodInsulin = khAmount / khFactor;
+        } else {
+            // Für BE/KE: Menge * Faktor (z.B. 4 KE * 1.5 = 6 IE)
+            foodInsulin = khAmount * khFactor;
+        }
+    }
+    
+    const total = correctionInsulin + foodInsulin;
+    const resArea = document.getElementById('result-area');
+    
+    if (total > 0) {
+        resArea.style.display = 'block';
+        document.getElementById('bolus-total').innerText = total.toFixed(2);
+        document.getElementById('breakdown').innerHTML = 
+            `Korrektur: ${correctionInsulin.toFixed(2)} IE | Mahlzeit: ${foodInsulin.toFixed(2)} IE`;
+    } else {
+        resArea.style.display = 'none';
+    }
+}
+</script>
+
+</body>
+</html>
