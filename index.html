@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profi Bolus-Rechner</title>
+    <title>Profi Bolus-Rechner mit IOB</title>
     <style>
         body { font-family: -apple-system, system-ui, sans-serif; background: #121212; color: white; padding: 15px; }
         .calc-container { max-width: 500px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 15px; border: 1px solid #333; }
@@ -16,6 +16,7 @@
         .flex-row div { flex: 1; }
         .result-box { margin-top: 20px; padding: 20px; background: #3498db22; border-radius: 10px; border: 1px solid #3498db; text-align: center; display: none; }
         .ins-value { font-size: 32px; font-weight: bold; color: #5dade2; }
+        .iob-input { border: 1px solid #9b59b6 !important; background: #251b2b !important; }
         .disclaimer { font-size: 11px; color: #888; margin-top: 20px; text-align: center; line-height: 1.4; border: 1px dashed #444; padding: 10px; }
     </style>
 </head>
@@ -32,7 +33,7 @@
         </select>
     </div>
 
-    <div class="section-title">Korrektur</div>
+    <div class="section-title">Korrektur & Aktives Insulin</div>
     <div class="flex-row">
         <div class="input-group">
             <label id="lbl-akt">Aktueller BZ:</label>
@@ -43,9 +44,16 @@
             <input type="number" id="targetBZ" step="0.1" placeholder="z.B. 100" oninput="calculateBolus()">
         </div>
     </div>
-    <div class="input-group">
-        <label>Korrektur-Faktor (ISF): 1 IE senkt BZ um...</label>
-        <input type="number" id="isf" step="0.1" placeholder="z.B. 40" oninput="calculateBolus()">
+    
+    <div class="flex-row">
+        <div class="input-group">
+            <label>Korrektur-Faktor (ISF):</label>
+            <input type="number" id="isf" step="0.1" placeholder="z.B. 40" oninput="calculateBolus()">
+        </div>
+        <div class="input-group">
+            <label style="color: #d199e8;">Aktives Insulin (IOB):</label>
+            <input type="number" id="iob" class="iob-input" step="0.1" placeholder="0.0" oninput="calculateBolus()">
+        </div>
     </div>
 
     <div class="section-title">Mahlzeit</div>
@@ -75,7 +83,7 @@
     </div>
 
     <div class="disclaimer">
-        <strong>⚠️ Wichtig:</strong> Dieser Rechner berücksichtigt kein aktives Insulin (IOB). Berechnete Werte sind nur Vorschläge. Besprich deine Faktoren mit deinem Diabetesteam und entscheide eigenverantwortlich.
+        <strong>⚠️ Vorsicht:</strong> IOB wird hier von der Korrektur abgezogen. Berechnete Werte sind nur Orientierungshilfen. Besprich deine Einstellungen mit deinem Arzt.
     </div>
 </div>
 
@@ -84,11 +92,9 @@ function updateLabels() {
     const unit = document.getElementById('unit').value;
     const mode = document.getElementById('calcMode').value;
     
-    // BZ Labels
     document.getElementById('lbl-akt').innerText = `Aktueller BZ (${unit}):`;
     document.getElementById('lbl-ziel').innerText = `Zielwert (${unit}):`;
     
-    // KH Labels
     const factorLabel = document.getElementById('lbl-faktor');
     const quantityLabel = document.getElementById('lbl-menge');
     
@@ -109,34 +115,39 @@ function calculateBolus() {
     const current = parseFloat(document.getElementById('currentBZ').value) || 0;
     const target = parseFloat(document.getElementById('targetBZ').value) || 0;
     const isf = parseFloat(document.getElementById('isf').value) || 0;
+    const iob = parseFloat(document.getElementById('iob').value) || 0;
     const mode = document.getElementById('calcMode').value;
     const khAmount = parseFloat(document.getElementById('khAmount').value) || 0;
     const khFactor = parseFloat(document.getElementById('khFactor').value) || 0;
     
+    // 1. Korrektur berechnen
     let correctionInsulin = 0;
     if (current > target && isf > 0) {
         correctionInsulin = (current - target) / isf;
     }
     
+    // 2. IOB von der Korrektur abziehen (aber nicht unter 0)
+    let netCorrection = Math.max(0, correctionInsulin - iob);
+    
+    // 3. Mahlzeit berechnen
     let foodInsulin = 0;
     if (khAmount > 0 && khFactor > 0) {
         if (mode === "gramm") {
-            // Für g KH: Menge / Verhältnis (z.B. 60g / 10 = 6 IE)
             foodInsulin = khAmount / khFactor;
         } else {
-            // Für BE/KE: Menge * Faktor (z.B. 4 KE * 1.5 = 6 IE)
             foodInsulin = khAmount * khFactor;
         }
     }
     
-    const total = correctionInsulin + foodInsulin;
+    const total = netCorrection + foodInsulin;
     const resArea = document.getElementById('result-area');
     
-    if (total > 0) {
+    if (total > 0 || (current > 0 && isf > 0)) {
         resArea.style.display = 'block';
         document.getElementById('bolus-total').innerText = total.toFixed(2);
         document.getElementById('breakdown').innerHTML = 
-            `Korrektur: ${correctionInsulin.toFixed(2)} IE | Mahlzeit: ${foodInsulin.toFixed(2)} IE`;
+            `Korrektur (netto): ${netCorrection.toFixed(2)} IE | Mahlzeit: ${foodInsulin.toFixed(2)} IE<br>` +
+            `<small>(IOB von ${iob.toFixed(2)} IE wurde berücksichtigt)</small>`;
     } else {
         resArea.style.display = 'none';
     }
